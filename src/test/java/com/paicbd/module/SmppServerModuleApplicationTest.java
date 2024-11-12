@@ -102,7 +102,7 @@ class SmppServerModuleApplicationTest {
         startSmppServer(host, port);
         toSleep(1);
         smppClient = new SmppClientMock(host, port);
-        smppSession =  smppClient.createAndBindSmppSession(okServiceProvider);
+        smppSession = smppClient.createAndBindSmppSession(okServiceProvider);
         assertTrue(smppSession.getSessionState().isBound());
     }
 
@@ -114,7 +114,10 @@ class SmppServerModuleApplicationTest {
 
     @Test
     void startSmppServerAndOpenConnectionWhenSendSubmitAndReceiveDeliverSmThenDoItSuccessfully() {
-        messageEventProvider().forEach(this::sendSubmitSmWithAndWithoutOptionalParameterReturnsExpectedDeliverSm);
+        messageEventProvider().forEach(messageEvent -> {
+            sendSubmitSmWithAndWithoutOptionalParameterReturnsExpectedDeliverSm(messageEvent);
+            toSleep(2);
+        });
 
         openingConnectionWhenInvalidPasswordThenSpSessionIsNull();
         openingConnectionWhenMaxBindExceededThenSpSessionIsNull();
@@ -171,7 +174,7 @@ class SmppServerModuleApplicationTest {
         when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
         when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
         when(this.generalSettingsCacheConfig.getCurrentGeneralSettings()).thenReturn(getGeneralSettings());
-        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMapSpy, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMapSpy, generalSettingsCacheConfig);
     }
 
     // Sending single submitSm and get deliverSm response
@@ -211,12 +214,12 @@ class SmppServerModuleApplicationTest {
                 .requestDlr(true)
                 .build();
 
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(okServiceProviderClone);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(okServiceProviderClone);
         assertNull(newMockSmppSession);
     }
 
     private void openingConnectionWhenMaxBindExceededThenSpSessionIsNull() {
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(okServiceProvider);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(okServiceProvider);
         assertNull(newMockSmppSession);
     }
 
@@ -243,17 +246,17 @@ class SmppServerModuleApplicationTest {
                 .requestDlr(true)
                 .build();
 
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(invalidServiceprovider);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(invalidServiceprovider);
         assertNull(newMockSmppSession);
     }
 
     private void openingConnectionWhenServiceProviderIsStatusStoppedThenSpSessionIsNull() {
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(stoppedServiceProvider);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(stoppedServiceProvider);
         assertNull(newMockSmppSession);
     }
 
     private void openingConnectionWhenServiceProviderHasNotCreditThenSubmitIsInvalid() {
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(serviceProviderWithoutCredit);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(serviceProviderWithoutCredit);
         assertNotNull(newMockSmppSession);
 
         // sending message
@@ -285,7 +288,7 @@ class SmppServerModuleApplicationTest {
                 .requestDlr(true)
                 .build();
 
-        SMPPSession newMockSmppSession =  smppClient.createAndBindSmppSession(invalidBindTypeServiceProviderClone);
+        SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(invalidBindTypeServiceProviderClone);
         assertNull(newMockSmppSession);
     }
 
@@ -351,7 +354,7 @@ class SmppServerModuleApplicationTest {
                         .validityPeriod(0)
                         .registeredDelivery(0)
                         .dataCoding(8) // 8 is unicode data coding
-                        .shortMessage("This is a multipart test with data coding unicode - part 1")
+                        .shortMessage("This is a multipart test with optionalParameters and data coding unicode - part 1")
                         .isDlr(false)
                         .msgReferenceNumber("1")
                         .segmentSequence(1)
@@ -370,7 +373,7 @@ class SmppServerModuleApplicationTest {
                         .validityPeriod(0)
                         .registeredDelivery(0)
                         .dataCoding(8) // 8 is unicode data coding
-                        .shortMessage("This is a multipart test with data coding unicode - part 2")
+                        .shortMessage("This is a multipart test with optionalParameters and data coding unicode - part 2")
                         .isDlr(false)
                         .msgReferenceNumber("1")
                         .segmentSequence(2)
@@ -389,7 +392,7 @@ class SmppServerModuleApplicationTest {
                         .validityPeriod(0)
                         .registeredDelivery(0)
                         .dataCoding(0) // 8 is unicode data coding
-                        .shortMessage("This is a multipart test with data coding unicode and udhi - part 1")
+                        .shortMessage("This is a multipart test with data coding unicode and UDHI - part 1")
                         .isDlr(false)
                         .msgReferenceNumber("1")
                         .segmentSequence(1)
@@ -407,7 +410,7 @@ class SmppServerModuleApplicationTest {
                         .validityPeriod(0)
                         .registeredDelivery(0)
                         .dataCoding(0) // 8 is unicode data coding
-                        .shortMessage("This is a multipart test with data coding unicode and udhi - part 2")
+                        .shortMessage("This is a multipart test with data coding unicode and UDHI - part 2")
                         .isDlr(false)
                         .msgReferenceNumber("1")
                         .segmentSequence(2)
