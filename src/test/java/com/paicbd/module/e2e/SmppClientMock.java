@@ -112,7 +112,7 @@ public class SmppClientMock {
             byte totalSegment = convertIntegerToByte(submitSmEvent.getTotalSegment());
             byte segment = convertIntegerToByte(submitSmEvent.getSegmentSequence());
 
-            udh = new byte[] {
+            udh = new byte[]{
                     0x05,
                     (byte) 0x00,
                     (byte) 0x03,
@@ -129,7 +129,8 @@ public class SmppClientMock {
             case DCS_0 -> 0;
             case DCS_8 -> 2;
             case DCS_3 -> 3;
-            default -> throw new IllegalStateException("Unexpected value when determining encoding type: " + encodingType);
+            default ->
+                    throw new IllegalStateException("Unexpected value when determining encoding type: " + encodingType);
         };
     }
 
