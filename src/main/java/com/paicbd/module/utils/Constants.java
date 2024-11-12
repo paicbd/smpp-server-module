@@ -1,5 +1,8 @@
 package com.paicbd.module.utils;
 
+import com.paicbd.smsc.utils.Generated;
+
+@Generated
 public class Constants {
     private Constants() {
         throw new IllegalStateException("Utility class");

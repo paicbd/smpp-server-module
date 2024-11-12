@@ -6,11 +6,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+@Generated
 @EnableAsync
 @EnableScheduling
 @SpringBootApplication
 public class SmppServerModuleApplication {
-    @Generated
     public static void main(String[] args) {
         SpringApplication.run(SmppServerModuleApplication.class, args);
     }
