@@ -1,5 +1,6 @@
 package com.paicbd.module.utils;
 
+import com.paicbd.smsc.utils.Generated;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -7,116 +8,117 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Getter
+@Generated
 @Component
 public class AppProperties {
     // Redis
     @Value("#{'${redis.cluster.nodes}'.split(',')}")
-    private List<String> redisNodes = List.of("localhost:7000", "localhost:7001");
+    private List<String> redisNodes;
 
     @Value("${redis.threadPool.maxTotal}")
-    private int redisMaxTotal = 20;
+    private int redisMaxTotal;
 
     @Value("${redis.threadPool.maxIdle}")
-    private int redisMaxIdle = 20;
+    private int redisMaxIdle;
 
     @Value("${redis.threadPool.minIdle}")
-    private int redisMinIdle = 1;
+    private int redisMinIdle;
 
     @Value("${redis.threadPool.blockWhenExhausted}")
-    private boolean redisBlockWhenExhausted = true;
+    private boolean redisBlockWhenExhausted;
 
     // Websocket
     @Value("${websocket.server.host}")
-    private String wsHost = "localhost";
+    private String wsHost;
 
     @Value("${websocket.server.port}")
-    private int wsPort = 9976;
+    private int wsPort;
 
     @Value("${websocket.server.path}")
     private String wsPath;
 
     @Value("${websocket.server.enabled}")
-    private boolean wsEnabled = false;
+    private boolean wsEnabled;
 
     // Hashes
     @Value("${smpp.serviceProvidersHashName}")
-    private String serviceProvidersHashName = "service_providers";
+    private String serviceProvidersHashName;
 
     @Value("${smpp.server.configurationHashName}")
-    private String configurationHash = "configuration";
+    private String configurationHash;
 
     @Value("${smpp.server.keyName}")
-    private String serverKey = "smpp_server";
+    private String serverKey;
 
     @Value("${smpp.server.general.settings.hash}")
-    private String smppGeneralSettingsHash = "general_settings";
+    private String smppGeneralSettingsHash;
 
     @Value("${smpp.server.general.settings.key}")
-    private String smppGeneralSettingsKey = "smpp_http";
+    private String smppGeneralSettingsKey;
 
     @Value("${websocket.header.name}")
-    private String websocketHeaderName = "Authorization";
+    private String websocketHeaderName;
 
     @Value("${websocket.header.value}")
-    private String websocketHeaderValue = "Authorization";
+    private String websocketHeaderValue;
 
     @Value("${websocket.server.retryInterval}")
-    private int websocketRetryInterval = 10; // seconds
+    private int websocketRetryInterval; // seconds
 
     @Value("${spring.application.name}")
-    private String instanceName = "smpp-server";
+    private String instanceName;
 
     @Value("${server.ip}")
-    private String instanceIp = "127.0.0.1";
+    private String instanceIp;
 
     @Value("${server.port}")
-    private String instancePort = "9908";
+    private String instancePort;
 
     @Value("${instance.initial.status}")
-    private String instanceInitialStatus = "STARTED";
+    private String instanceInitialStatus;
 
     @Value("${instance.protocol}")
-    private String instanceProtocol = "SMPP";
+    private String instanceProtocol;
 
     @Value("${instance.scheme}")
-    private String instanceScheme = "";
+    private String instanceScheme;
 
     @Value("${instance.ratingRequest.apiKey}")
-    private String httpRequestApiKey = "123";
+    private String httpRequestApiKey;
 
     // DeliverSmQueueConsumer
     @Value("${redis.deliverSm.queue}")
-    private String deliverSmQueue = "smpp_dlr";
+    private String deliverSmQueue;
 
     @Value("${queue.consumer.workers}")
-    private int deliverSmWorkers = 10;
+    private int deliverSmWorkers;
 
     @Value("${queue.consumer.batch.size}")
-    private int deliverSmBatchSizePerWorker = 1000;
+    private int deliverSmBatchSizePerWorker;
 
     // Message Lists
     @Value("${redis.preMessageList}")
-    private String preMessageList = "PreMessage";
+    private String preMessageList;
 
     @Value("${queue.smpp.messageParts}")
-    private String messagePartsHash = "smpp_message_parts";
+    private String messagePartsHash;
 
     // SMPP Server
     @Value("${smpp.server.ip}")
-    private String smppServerIp = "127.0.0.1";
+    private String smppServerIp;
 
     @Value("${smpp.server.port}")
-    private int smppServerPort = 5054;
+    private int smppServerPort;
 
     @Value("${smpp.server.processorDegree}")
-    private int smppServerProcessorDegree = 3;
+    private int smppServerProcessorDegree;
 
     @Value("${smpp.server.queueCapacity}")
-    private int smppServerQueueCapacity = 100;
+    private int smppServerQueueCapacity;
 
     @Value("${smpp.server.transactionTimer}")
-    private int smppServerTransactionTimer = 5000;
+    private int smppServerTransactionTimer;
 
     @Value("${smpp.server.waitForBind}")
-    private int smppServerWaitForBind = 5000;
+    private int smppServerWaitForBind;
 }

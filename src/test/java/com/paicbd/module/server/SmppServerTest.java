@@ -7,97 +7,187 @@ import com.paicbd.module.utils.SpSession;
 import com.paicbd.smsc.cdr.CdrProcessor;
 import com.paicbd.smsc.dto.ServiceProvider;
 import com.paicbd.smsc.ws.SocketSession;
-import org.jsmpp.session.Session;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import redis.clients.jedis.JedisCluster;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 @ExtendWith(MockitoExtension.class)
 class SmppServerTest {
-    @Mock(strictness = Mock.Strictness.LENIENT) // In handleFrameLogic_invalidDestination test case, IllegalArgumentException is thrown by the method
-    private SocketSession socketSession;
     @Mock
-    private JedisCluster jedisCluster;
+    JedisCluster jedisCluster;
+
     @Mock
-    private AppProperties appProperties;
+    CdrProcessor cdrProcessor;
+
     @Mock
-    private CdrProcessor cdrProcessor;
+    SocketSession socketSession;
+
     @Mock
-    private Set<ServiceProvider> providers;
+    ServerHandler serverHandler;
+
     @Mock
-    private ConcurrentMap<String, SpSession> spSessionMap;
+    AppProperties appProperties;
+
     @Mock
-    private ConcurrentMap<Integer, String> networkIdSystemIdMap;
-    @InjectMocks
+    ConcurrentMap<Integer, SpSession> spSessionMap;
+
+    @Mock
     GeneralSettingsCacheConfig generalSettingsCacheConfig;
-    @Mock
-    private ServerHandler serverHandler;
 
-    @Mock
+    @InjectMocks
     private SmppServer smppServerMock;
-    @Mock
-    private SpSession spSessionMock;
-    @Mock
-    private Session sessionMock;
 
-    @BeforeEach
-    void setUp() {
-        ServiceProvider sp = new ServiceProvider();
-        sp.setNetworkId(1);
-        sp.setCurrentBindsCount(1);
-        sp.setSystemId("systemId123");
-        spSessionMock = new SpSession(this.jedisCluster, sp, this.appProperties);
-        spSessionMock.getCurrentSmppSessions().add(sessionMock);
-        spSessionMap.put("systemId123", spSessionMock);
-        smppServerMock = new SmppServer(jedisCluster, cdrProcessor, socketSession, serverHandler, appProperties, providers, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig);
+    @Test
+    @DisplayName("Initializing providers list when service_provider list in Redis is not empty")
+    void initProviderListWhenServiceProviderIsNotEmptyThenDoItSuccessfully() {
+        ServiceProvider firstServiceProviderMock = ServiceProvider.builder()
+                .networkId(1)
+                .systemId("smppSP")
+                .protocol("SMPP")
+                .binds(new ArrayList<>())
+                .enabled(0)
+                .enquireLinkPeriod(5000)
+                .build();
+
+        ServiceProvider secondServiceProviderMock = ServiceProvider.builder()
+                .networkId(2)
+                .systemId("testSP")
+                .protocol("SMPP")
+                .binds(new ArrayList<>())
+                .enabled(0)
+                .enquireLinkPeriod(5000)
+                .build();
+
+        Map<String, String> serviceProviderMapMock = new HashMap<>();
+        serviceProviderMapMock.put("1", firstServiceProviderMock.toString());
+        serviceProviderMapMock.put("2", secondServiceProviderMock.toString());
+
+        Set<ServiceProvider> realProviders = new HashSet<>();
+        realProviders.add(firstServiceProviderMock);
+        Set<ServiceProvider> providersSpy = spy(realProviders);
+
+        when(appProperties.getSmppServerProcessorDegree()).thenReturn(15);
+        when(appProperties.getSmppServerQueueCapacity()).thenReturn(1000);
+        when(appProperties.getServiceProvidersHashName()).thenReturn("service_providers");
+        when(jedisCluster.hgetAll("service_providers")).thenReturn(serviceProviderMapMock);
+
+        smppServerMock = new SmppServer(jedisCluster, cdrProcessor, socketSession, serverHandler, appProperties, providersSpy, spSessionMap, generalSettingsCacheConfig);
+        smppServerMock.init();
+        verify(providersSpy).addAll(anyCollection());
+
+        assertEquals(2, providersSpy.size());
+        boolean containsFirsProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == firstServiceProviderMock.getNetworkId());
+        assertTrue(containsFirsProvider);
+        boolean containsSecondProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == secondServiceProviderMock.getNetworkId());
+        assertTrue(containsSecondProvider);
     }
 
     @Test
-    void init() {
-        Assertions.assertDoesNotThrow(() -> smppServerMock.init());
+    @DisplayName("testing to simulate a error when reading service_provider list")
+    void loadServiceProvidersWhenUnexpectedErrorOccursThenServiceProviderWithErrorIsIgnored() {
+        ServiceProvider firstServiceProviderMock = ServiceProvider.builder()
+                .networkId(1)
+                .systemId("smppSP")
+                .protocol("SMPP")
+                .binds(new ArrayList<>())
+                .enabled(0)
+                .enquireLinkPeriod(5000)
+                .build();
+
+        ServiceProvider secondServiceProviderMock = ServiceProvider.builder()
+                .networkId(2)
+                .systemId("testSP")
+                .protocol("SMPP")
+                .binds(new ArrayList<>())
+                .enabled(0)
+                .enquireLinkPeriod(5000)
+                .build();
+
+        Map<String, String> serviceProviderMapMock = new HashMap<>();
+        serviceProviderMapMock.put("1", firstServiceProviderMock.toString());
+        serviceProviderMapMock.put("3", "{");
+        serviceProviderMapMock.put("2", secondServiceProviderMock.toString());
+
+        Set<ServiceProvider> realProviders = new HashSet<>();
+        Set<ServiceProvider> providersSpy = spy(realProviders);
+
+        when(appProperties.getServiceProvidersHashName()).thenReturn("service_providers");
+        when(jedisCluster.hgetAll("service_providers")).thenReturn(serviceProviderMapMock);
+
+        smppServerMock = new SmppServer(jedisCluster, cdrProcessor, socketSession, serverHandler, appProperties, providersSpy, spSessionMap, generalSettingsCacheConfig);
+        smppServerMock.loadServiceProviders();
+
+        verify(providersSpy).addAll(anyCollection());
+        assertEquals(2, providersSpy.size());
+
+        // verify that service provider with networkId = 3 was not included
+        boolean containsWrongNetworkIdProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == 3);
+        assertFalse(containsWrongNetworkIdProvider);
+
+        // other if exists
+        boolean containsFirstProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == firstServiceProviderMock.getNetworkId());
+        assertTrue(containsFirstProvider);
+
+        boolean containsSecondProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == secondServiceProviderMock.getNetworkId());
+        assertTrue(containsSecondProvider);
     }
 
     @Test
-    void loadServiceProviders() {
-        ServiceProvider sp = new ServiceProvider();
-        sp.setSystemId("systemId1");
-        sp.setNetworkId(1);
-        sp.setCurrentBindsCount(1);
-        sp.setProtocol("HTTP");
+    @DisplayName("testing load service provider when protocol is not SMPP")
+    void loadServiceProvidersWhenProtocolIsNotSMPPThenServiceProviderIsIgnored() {
+        ServiceProvider serviceProviderMock = ServiceProvider.builder()
+                .networkId(1)
+                .systemId("testSP")
+                .protocol("HTTP")
+                .binds(new ArrayList<>())
+                .enabled(0)
+                .enquireLinkPeriod(5000)
+                .build();
 
-        ServiceProvider sp2 = new ServiceProvider();
-        sp2.setNetworkId(1);
-        sp2.setSystemId("systemId2");
-        sp2.setCurrentBindsCount(1);
-        sp.setProtocol("SMPP");
+        Map<String, String> serviceProviderMapMock = new HashMap<>();
+        serviceProviderMapMock.put("1", serviceProviderMock.toString());
 
-        Map<String, String> spAll = new HashMap<>();
-        spAll.put("systemId1", sp.toString());
-        spAll.put("systemId2", sp2.toString());
-        Mockito.when(this.appProperties.getServiceProvidersHashName()).thenReturn("service_providers");
-        Mockito.when(this.jedisCluster.hgetAll(appProperties.getServiceProvidersHashName())).thenReturn(spAll);
+        Set<ServiceProvider> realProviders = new HashSet<>();
+        Set<ServiceProvider> providersSpy = spy(realProviders);
 
-        Assertions.assertDoesNotThrow(() -> smppServerMock.loadServiceProviders());
-    }
+        when(appProperties.getServiceProvidersHashName()).thenReturn("service_providers");
+        when(jedisCluster.hgetAll("service_providers")).thenReturn(serviceProviderMapMock);
 
-    @Test
-    void loadServiceProviders_throwException() {
-        Map<String, String> spAll = new HashMap<>();
-        spAll.put("systemId1", "{");
-        Mockito.when(this.appProperties.getServiceProvidersHashName()).thenReturn("service_providers");
-        Mockito.when(this.jedisCluster.hgetAll(appProperties.getServiceProvidersHashName())).thenReturn(spAll);
+        smppServerMock = new SmppServer(jedisCluster, cdrProcessor, socketSession, serverHandler, appProperties, providersSpy, spSessionMap, generalSettingsCacheConfig);
+        smppServerMock.loadServiceProviders();
 
-        Assertions.assertDoesNotThrow(() -> smppServerMock.loadServiceProviders());
+        verify(providersSpy, never()).addAll(anySet());
+        assertEquals(0, providersSpy.size());
+
+        // verify that service provider with HTTP protocol was not included
+        boolean containsProvider = providersSpy.stream()
+                .anyMatch(provider -> provider.getNetworkId() == serviceProviderMock.getNetworkId());
+        assertFalse(containsProvider);
     }
 }

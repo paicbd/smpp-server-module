@@ -4,7 +4,9 @@ import com.paicbd.smsc.cdr.CdrProcessor;
 import com.paicbd.smsc.dto.GeneralSettings;
 import com.paicbd.smsc.dto.MessageEvent;
 import com.paicbd.smsc.dto.UtilsRecords;
+import com.paicbd.smsc.utils.Generated;
 import com.paicbd.smsc.utils.SmppEncoding;
+import com.paicbd.smsc.utils.SmppUtils;
 import com.paicbd.smsc.utils.UtilsEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.jsmpp.bean.DataCoding;
@@ -22,6 +24,7 @@ import java.util.Set;
 
 @Slf4j
 public class StaticMethods {
+    @Generated
     private StaticMethods() {
         throw new IllegalStateException("Utility Class");
     }

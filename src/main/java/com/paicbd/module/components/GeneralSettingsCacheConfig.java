@@ -1,6 +1,5 @@
 package com.paicbd.module.components;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.paicbd.module.utils.AppProperties;
 import com.paicbd.smsc.dto.GeneralSettings;
 import com.paicbd.smsc.exception.RTException;
@@ -36,7 +35,7 @@ public class GeneralSettingsCacheConfig {
     public boolean updateGeneralSettings() {
         var generalSettingsUpdated = getGeneralSettingFromRedis();
         if (Objects.isNull(generalSettingsUpdated)) {
-            log.error("GeneralSettings is null");
+            log.error("generalSettingsUpdated is null");
             return false;
         }
         this.generalSettingsCache = generalSettingsUpdated;
@@ -45,11 +44,10 @@ public class GeneralSettingsCacheConfig {
 
     public GeneralSettings getGeneralSettingFromRedis() {
         String value = this.jedisCluster.hget(this.properties.getSmppGeneralSettingsHash(), this.properties.getSmppGeneralSettingsKey());
-        TypeReference<GeneralSettings> valueTypeRef = new TypeReference<>() {};
-        try {
-            return Converter.stringToObject(value, valueTypeRef);
-        } catch (Exception e) {
+        if (Objects.isNull(value)) {
+            log.info("General settings was not found in Redis");
             return null;
         }
+        return Converter.stringToObject(value, GeneralSettings.class);
     }
 }

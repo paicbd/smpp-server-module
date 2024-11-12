@@ -1,12 +1,12 @@
 package com.paicbd.module.config;
 
-import com.paicbd.module.server.SessionStateListenerImpl;
 import com.paicbd.module.utils.AppProperties;
 import com.paicbd.module.utils.SpSession;
 import com.paicbd.smsc.cdr.CdrProcessor;
 import com.paicbd.smsc.dto.ServiceProvider;
 import com.paicbd.smsc.dto.UtilsRecords;
 import com.paicbd.smsc.utils.Converter;
+import com.paicbd.smsc.utils.Generated;
 import com.paicbd.smsc.ws.SocketSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -18,10 +18,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@Generated
 @Configuration
 @RequiredArgsConstructor
 public class BeansDefinition {
-
     private final AppProperties appProperties;
 
     @Bean
@@ -30,7 +30,7 @@ public class BeansDefinition {
     }
 
     @Bean
-    public ConcurrentMap<String, SpSession> spSessionMap() {
+    public ConcurrentMap<Integer, SpSession> spSessionMap() {
         return new ConcurrentHashMap<>();
     }
 
@@ -43,11 +43,6 @@ public class BeansDefinition {
     public JedisCluster jedisCluster() {
         return Converter.paramsToJedisCluster(getJedisClusterParams(appProperties.getRedisNodes(), appProperties.getRedisMaxTotal(),
                 appProperties.getRedisMinIdle(), appProperties.getRedisMaxIdle(), appProperties.isRedisBlockWhenExhausted()));
-    }
-
-    @Bean
-    public ConcurrentMap<String, SessionStateListenerImpl> sessionStateListenerBySp() {
-        return new ConcurrentHashMap<>();
     }
 
     @Bean

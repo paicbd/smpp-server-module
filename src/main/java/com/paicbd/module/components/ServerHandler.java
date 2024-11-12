@@ -32,6 +32,7 @@ public class ServerHandler {
             String serverHandlerJson = jedisCluster.hget(this.appProperties.getConfigurationHash(), this.appProperties.getServerKey());
             if (serverHandlerJson == null) {
                 log.error("ServerHandler not found in redis, configurationHash: {}, serverKey: {}", this.appProperties.getConfigurationHash(), this.appProperties.getServerKey());
+                return;
             }
             Map<String, Object> serverHandlerUpdated = Converter.stringToObject(serverHandlerJson, new TypeReference<>() {});
             this.state = serverHandlerUpdated.get("state").toString();

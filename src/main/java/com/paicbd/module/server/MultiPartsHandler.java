@@ -35,15 +35,12 @@ public class MultiPartsHandler {
         try {
             MessagePart messagePartEvent = new MessagePart();
             String key = submitSmEvent.getSystemId();
+            int totalSegment;
+            int segmentSequence;
             int[] udh = (int[]) mapUdh.get(Constants.IEI_CONCATENATED_MESSAGE);
-            String msgReferenceNumber = "";
-            int totalSegment = 0;
-            int segmentSequence = 0;
-            if (udh.length > 0) {
-                msgReferenceNumber = String.valueOf(udh[0]);
-                totalSegment = udh[1];
-                segmentSequence = udh[2];
-            }
+            String msgReferenceNumber = String.valueOf(udh[0]);
+            totalSegment = udh[1];
+            segmentSequence = udh[2];
 
             String messagePart = Converter.udhMapToJson(mapUdh);
             String message = mapUdh.get("message").toString();

@@ -8,6 +8,7 @@ import com.paicbd.smsc.dto.GeneralSettings;
 import com.paicbd.smsc.dto.MessageEvent;
 import com.paicbd.smsc.dto.ServiceProvider;
 import com.paicbd.smsc.utils.Converter;
+import com.paicbd.smsc.utils.Generated;
 import lombok.extern.slf4j.Slf4j;
 import org.jsmpp.extra.SessionState;
 import org.jsmpp.session.SMPPServerSession;
@@ -49,15 +50,15 @@ public class SessionStateListenerImpl implements SessionStateListener {
     private final ServiceProvider currentProvider;
     private final CdrProcessor cdrProcessor;
 
-    public SessionStateListenerImpl(String systemId, ConcurrentMap<String, SpSession> spSessionMap, StompSession stompSession, JedisCluster jedisCluster, GeneralSettings smppGeneralSettings, CdrProcessor cdrProcessor) {
+    public SessionStateListenerImpl(Integer networkId, ConcurrentMap<Integer, SpSession> spSessionMap, StompSession stompSession, JedisCluster jedisCluster, GeneralSettings smppGeneralSettings, CdrProcessor cdrProcessor) {
         this.stompSession = stompSession;
         this.jedisCluster = jedisCluster;
         this.smppGeneralSettings = smppGeneralSettings;
         this.cdrProcessor = cdrProcessor;
-        this.spSession = spSessionMap.get(systemId);
+        this.spSession = spSessionMap.get(networkId);
         this.currentProvider = spSession.getCurrentServiceProvider();
         this.notifyWs = stompSession != null;
-        log.info("SessionStateListenerImpl created for systemId {}", systemId);
+        log.info("SessionStateListenerImpl created for networkId {}", networkId);
     }
 
     @Override
@@ -70,10 +71,10 @@ public class SessionStateListenerImpl implements SessionStateListener {
         }
 
         if (isBoundState(newState)) {
-            isBoundActions(source);
+            boundStateProcessor(source);
             this.updateOnRedis();
         } else if (newState == SessionState.CLOSED) {
-            isClosedActions(source);
+            closeStateProcessor(source);
             this.updateOnRedis();
         }
     }
@@ -84,27 +85,24 @@ public class SessionStateListenerImpl implements SessionStateListener {
 
     private void sendStompMessage(String param, String value) {
         synchronized (stompSession) {
-            String message = this.message(currentProvider.getSystemId(), param, value);
+            String message = this.message(String.valueOf(currentProvider.getNetworkId()), param, value);
             log.info(WEBSOCKET_STATUS_ENDPOINT + " -> {}", message);
             stompSession.send(WEBSOCKET_STATUS_ENDPOINT, message);
         }
     }
 
-    private String message(String systemId, String param, String value) {
-        return String.format("%s,%s,%s,%s", TYPE, systemId, param, value);
+    private String message(String networkId, String param, String value) {
+        return String.format("%s,%s,%s,%s", TYPE, networkId, param, value);
     }
 
     public void updateOnRedis() {
         String data = currentProvider.toString();
-        if (data.isEmpty()) {
-            return;
-        }
         //Using this to skip backslash coming from regex in redis
         data = data.replace("\\\\", "\\");
-        jedisCluster.hset("service_providers", currentProvider.getSystemId(), data);
+        jedisCluster.hset("service_providers", String.valueOf(currentProvider.getNetworkId()), data);
     }
 
-    private void isBoundActions(Session source) {
+    private void boundStateProcessor(Session source) {
         spSession.getCurrentSmppSessions().add(source);
         if (spSession.getCurrentServiceProvider().getCurrentBindsCount() == 0) { // First bind request
             this.currentProvider.setStatus(BINDING);
@@ -124,7 +122,7 @@ public class SessionStateListenerImpl implements SessionStateListener {
         }
     }
 
-    private void isClosedActions(Session source) {
+    private void closeStateProcessor(Session source) {
         spSession.getCurrentSmppSessions().remove(source);
         if (spSession.getCurrentServiceProvider().getCurrentBindsCount() == 1) {
             this.currentProvider.setStatus(UNBINDING);
@@ -149,6 +147,7 @@ public class SessionStateListenerImpl implements SessionStateListener {
         }
     }
 
+    @Generated
     private void waitForSessionState() { // This method is used to wait for sending the next message to the websocket
         try {
             Thread.sleep(500);
@@ -159,14 +158,13 @@ public class SessionStateListenerImpl implements SessionStateListener {
     }
 
     private void handlePendingDeliverSm() {
-        var key = currentProvider.getSystemId().concat("_smpp_pending_dlr");
+        var key = String.valueOf(currentProvider.getNetworkId()).concat("_smpp_pending_dlr");
         long size = jedisCluster.llen(key);
-        var pendingDeliverSm = jedisCluster.lpop(key, (int) size);
-        if (Objects.isNull(pendingDeliverSm) || pendingDeliverSm.isEmpty()) {
-            log.debug("The state of {} is BOUND but there are no pending deliver_sm", currentProvider.getSystemId());
+        if (size < 1) {
+            log.debug("The state of {} networkId is BOUND but there are no pending deliver_sm", currentProvider.getNetworkId());
             return;
         }
-
+        var pendingDeliverSm = jedisCluster.lpop(key, (int) size);
         var deliverSmEvents = pendingDeliverSm.stream()
                 .map(this::castToDeliverSmEvent)
                 .filter(Objects::nonNull)

@@ -3,6 +3,7 @@ package com.paicbd.module.config;
 import com.paicbd.module.components.CustomFrameHandler;
 import com.paicbd.module.utils.AppProperties;
 import com.paicbd.smsc.dto.UtilsRecords;
+import com.paicbd.smsc.utils.Generated;
 import com.paicbd.smsc.ws.SocketClient;
 import com.paicbd.smsc.ws.SocketSession;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import static com.paicbd.module.utils.Constants.SERVICE_PROVIDER_DELETED_ENDPOIN
 import static com.paicbd.module.utils.Constants.GENERAL_SETTINGS_SMPP_HTTP_ENDPOINT;
 
 @Slf4j
+@Generated
 @Configuration
 @RequiredArgsConstructor
 public class WebSocketConfig {
