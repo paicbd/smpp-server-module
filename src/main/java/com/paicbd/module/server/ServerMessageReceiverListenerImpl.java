@@ -3,7 +3,6 @@ package com.paicbd.module.server;
 import com.paicbd.module.components.GeneralSettingsCacheConfig;
 import com.paicbd.module.utils.AppProperties;
 import com.paicbd.module.utils.Constants;
-import com.paicbd.module.utils.SmppUtils;
 import com.paicbd.module.utils.SpSession;
 import com.paicbd.module.utils.StaticMethods;
 import com.paicbd.smsc.cdr.CdrProcessor;
@@ -11,8 +10,11 @@ import com.paicbd.smsc.dto.GeneralSettings;
 import com.paicbd.smsc.dto.MessageEvent;
 import com.paicbd.smsc.dto.ServiceProvider;
 import com.paicbd.smsc.utils.Converter;
+import com.paicbd.smsc.utils.Generated;
 import com.paicbd.smsc.utils.MessageIDGeneratorImpl;
+import com.paicbd.smsc.utils.RequestDelivery;
 import com.paicbd.smsc.utils.SmppEncoding;
+import com.paicbd.smsc.utils.SmppUtils;
 import com.paicbd.smsc.utils.UtilsEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,7 +62,6 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
 
     @Override
     public SubmitSmResult onAcceptSubmitSm(SubmitSm submitSm, SMPPServerSession smppServerSession) throws ProcessRequestException {
-        requestCounter.incrementAndGet();
         byte dataCoding = submitSm.getDataCoding();
 
         if (!StaticMethods.isValidDataCoding(dataCoding)) {
@@ -75,6 +76,7 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
 
         MessageId messageId = messageIDGenerator.newMessageId();
         addInQ(submitSm, messageId);
+        requestCounter.incrementAndGet();
         return new SubmitSmResult(messageId, new OptionalParameter[0]);
     }
 
@@ -113,7 +115,7 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
         event.setMessageId(messageId.getValue());
         event.setParentId(messageId.getValue());
 
-        if (submitSm.getOptionalParameters() != null && submitSm.getOptionalParameters().length >= 1) {
+        if (submitSm.getOptionalParameters() != null) {
             SmppUtils.setTLV(event, submitSm.getOptionalParameters());
         }
 
@@ -136,54 +138,63 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
         submitSmEvent.setDestAddrNpi((int) submitSm.getDestAddrNpi());
         submitSmEvent.setDestinationAddr(submitSm.getDestAddress());
         submitSmEvent.setEsmClass((int) submitSm.getEsmClass());
-        submitSmEvent.setValidityPeriod(submitSm.getValidityPeriod());
-        submitSmEvent.setRegisteredDelivery(Boolean.TRUE.equals(spSession.getCurrentServiceProvider().getRequestDlr()) ? 1 : 0);
+        submitSmEvent.setStringValidityPeriod(submitSm.getValidityPeriod());
+        submitSmEvent.setRegisteredDelivery(Boolean.TRUE.equals(spSession.getCurrentServiceProvider().getRequestDlr()) ? RequestDelivery.REQUEST_DLR.getValue() : RequestDelivery.NON_REQUEST_DLR.getValue());
         submitSmEvent.setDataCoding((int) submitSm.getDataCoding());
         submitSmEvent.setSmDefaultMsgId(submitSm.getSmDefaultMsgId());
         submitSmEvent.setShortMessage(decodedMessage);
         return submitSmEvent;
     }
 
+    @Generated
     @Override
     public SubmitMultiResult onAcceptSubmitMulti(SubmitMulti submitMulti, SMPPServerSession smppServerSession) {
         return null;
     }
 
+    @Generated
     @Override
     public QuerySmResult onAcceptQuerySm(QuerySm querySm, SMPPServerSession smppServerSession) {
         return null;
     }
 
+    @Generated
     @Override
     public void onAcceptReplaceSm(ReplaceSm replaceSm, SMPPServerSession smppServerSession) {
         log.info("ReplaceSm received: {}", replaceSm);
     }
 
+    @Generated
     @Override
     public void onAcceptCancelSm(CancelSm cancelSm, SMPPServerSession smppServerSession) {
         log.info("CancelSm received: {}", cancelSm);
     }
 
+    @Generated
     @Override
     public BroadcastSmResult onAcceptBroadcastSm(BroadcastSm broadcastSm, SMPPServerSession smppServerSession) {
         return null;
     }
 
+    @Generated
     @Override
     public void onAcceptCancelBroadcastSm(CancelBroadcastSm cancelBroadcastSm, SMPPServerSession smppServerSession) {
         log.info("CancelBroadcastSm received: {}", cancelBroadcastSm);
     }
 
+    @Generated
     @Override
     public QueryBroadcastSmResult onAcceptQueryBroadcastSm(QueryBroadcastSm queryBroadcastSm, SMPPServerSession smppServerSession) {
         return null;
     }
 
+    @Generated
     @Override
     public DataSmResult onAcceptDataSm(DataSm dataSm, Session session) {
         return null;
     }
 
+    @Generated
     @Override
     public void onAcceptEnquireLink(EnquireLink enquireLink, Session source) {
         ServerMessageReceiverListener.super.onAcceptEnquireLink(enquireLink, source);

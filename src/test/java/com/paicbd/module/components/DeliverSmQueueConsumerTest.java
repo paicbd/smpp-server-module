@@ -3,162 +3,381 @@ package com.paicbd.module.components;
 import com.paicbd.module.utils.AppProperties;
 import com.paicbd.module.utils.SpSession;
 import com.paicbd.smsc.cdr.CdrProcessor;
-import com.paicbd.smsc.dto.ServiceProvider;
-import org.jsmpp.session.Session;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
+import com.paicbd.smsc.dto.GeneralSettings;
+import com.paicbd.smsc.dto.MessageEvent;
+import com.paicbd.smsc.dto.UtilsRecords;
+import com.paicbd.smsc.utils.SmppEncoding;
+import com.paicbd.smsc.utils.UtilsEnum;
+import org.jsmpp.InvalidResponseException;
+import org.jsmpp.PDUException;
+import org.jsmpp.bean.DataCoding;
+import org.jsmpp.bean.ESMClass;
+import org.jsmpp.bean.MessageType;
+import org.jsmpp.bean.NumberingPlanIndicator;
+import org.jsmpp.bean.OptionalParameter;
+import org.jsmpp.bean.RegisteredDelivery;
+import org.jsmpp.bean.TypeOfNumber;
+import org.jsmpp.extra.NegativeResponseException;
+import org.jsmpp.extra.ResponseTimeoutException;
+import org.jsmpp.session.SMPPServerSession;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import redis.clients.jedis.JedisCluster;
 
-import java.lang.reflect.Field;
+import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import static org.awaitility.Awaitility.await;
+import static org.awaitility.Durations.ONE_SECOND;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DeliverSmQueueConsumerTest {
-    @Mock(strictness = Mock.Strictness.LENIENT)
+    @Mock
     private JedisCluster jedisCluster;
-    @InjectMocks
-    private AppProperties appProperties;
+
     @Mock
     private CdrProcessor cdrProcessor;
+
     @Mock
-    private ServiceProvider sp;
+    private AppProperties appProperties;
+
     @Mock
-    private ConcurrentMap<Integer, String> networkIdSystemIdMap;
+    private ConcurrentMap<Integer, SpSession> spSessionMap;
+
     @Mock
     private GeneralSettingsCacheConfig generalSettingsCacheConfig;
-    @Mock(strictness = Mock.Strictness.LENIENT)
-    private SpSession spSessionMock;
-    @Mock
-    private ConcurrentMap<String, SpSession> spSessionMap;
+
     @InjectMocks
     private DeliverSmQueueConsumer deliverSmQueueConsumer;
-    private final ThreadFactory factory = Thread.ofVirtual().name("deliverSm-", 0).factory();
+
     @Mock
-    private final ExecutorService executorService = Executors.newThreadPerTaskExecutor(factory);
+    private SpSession spSessionMock;
+
     @Mock
-    private Session sessionMock;
+    private SMPPServerSession serverSession;
 
-    @BeforeEach
-    void setUp() {
-        spSessionMap = new ConcurrentHashMap<>();
-        sp = new ServiceProvider();
-        sp.setSystemId("systemId123");
-        sp.setNetworkId(1);
-        sp.setCurrentBindsCount(1);
-        SpSession spSession = new SpSession(this.jedisCluster, sp, this.appProperties);
-        spSession.getCurrentSmppSessions().add(sessionMock);
-        spSessionMap.put("systemId123", spSession);
+    @Test
+    @DisplayName("Testing complete flow of sending DeliverSm to service provider")
+    void startSchedulerWhenExecuteCompleteFlowThenDoItSuccessfully() throws ResponseTimeoutException, PDUException, IOException, InvalidResponseException, NegativeResponseException {
+        int destNetworkId = 1;
+        MessageEvent deliverSmEvent = MessageEvent.builder()
+                .id("1719421854353-11028072268459")
+                .deliverSmId("52b3afdb-565f-456c-8dff-97233d3afa88")
+                .deliverSmServerId("1719421854353-11028072268459")
+                .systemId("systemId123")
+                .sourceAddrTon(1)
+                .sourceAddrNpi(1)
+                .sourceAddr("50510201020")
+                .destAddrTon(1)
+                .destAddrNpi(1)
+                .destinationAddr("50582368999")
+                .esmClass(5)
+                .validityPeriod(60)
+                .registeredDelivery(0)
+                .dataCoding(0)
+                .smDefaultMsgId(0)
+                .shortMessage("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .originNetworkType("SP")
+                .originProtocol("SMPP")
+                .originNetworkId(2)
+                .destNetworkType("GW")
+                .destProtocol("SMPP")
+                .destNetworkId(destNetworkId)
+                .routingId(1)
+                .isDlr(true)
+                .delReceipt("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .optionalParameters(List.of(new UtilsRecords.OptionalParameter((short) 30, "52b3afdb-565f-456c-8dff-97233d3afa88")))
+                .build();
+
+
+        GeneralSettings generalSettingsMock = GeneralSettings.builder()
+                .id(1)
+                .validityPeriod(60)
+                .maxValidityPeriod(240)
+                .sourceAddrTon(1)
+                .sourceAddrNpi(1)
+                .destAddrTon(1)
+                .destAddrNpi(1)
+                .encodingIso88591(SmppEncoding.ISO88591)
+                .encodingGsm7(SmppEncoding.GSM7)
+                .encodingUcs2(SmppEncoding.UCS2)
+                .build();
+
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.spSessionMock.getNextRoundRobinSession()).thenReturn(serverSession);
+        when(this.spSessionMap.get(1)).thenReturn(spSessionMock);
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(List.of(deliverSmEvent.toString()));
+        when(this.generalSettingsCacheConfig.getCurrentGeneralSettings()).thenReturn(generalSettingsMock);
+
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
+
+        verify(this.spSessionMap).get(1);
+        verify(this.generalSettingsCacheConfig).getCurrentGeneralSettings();
+        verify(this.cdrProcessor).putCdrDetailOnRedis(any(UtilsRecords.CdrDetail.class));
+        verify(this.cdrProcessor).createCdr(deliverSmEvent.getMessageId());
+
+        // verify deliverSmEvent got from Redis vs sent
+        ArgumentCaptor<String> sourceAddrCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<TypeOfNumber> sourceAddrTonCaptor = ArgumentCaptor.forClass(TypeOfNumber.class);
+        ArgumentCaptor<NumberingPlanIndicator> sourceAddrNpiCaptor = ArgumentCaptor.forClass(NumberingPlanIndicator.class);
+        ArgumentCaptor<String> destAddrCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<TypeOfNumber> destAddrTonCaptor = ArgumentCaptor.forClass(TypeOfNumber.class);
+        ArgumentCaptor<NumberingPlanIndicator> destAddrNpiCaptor = ArgumentCaptor.forClass(NumberingPlanIndicator.class);
+        ArgumentCaptor<DataCoding> dataCodingCaptor = ArgumentCaptor.forClass(DataCoding.class);
+        ArgumentCaptor<byte[]> encodedShortMessageCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<OptionalParameter> optionalParameterArgumentCaptor = ArgumentCaptor.forClass(OptionalParameter.class);
+        ArgumentCaptor<ESMClass> esmClassArgumentCaptor = ArgumentCaptor.forClass(ESMClass.class);
+
+        verify(this.serverSession).deliverShortMessage(
+                eq(""),
+                sourceAddrTonCaptor.capture(),
+                sourceAddrNpiCaptor.capture(),
+                sourceAddrCaptor.capture(),
+                destAddrTonCaptor.capture(),
+                destAddrNpiCaptor.capture(),
+                destAddrCaptor.capture(),
+                esmClassArgumentCaptor.capture(),
+                eq((byte)0),
+                eq((byte)0),
+                eq(new RegisteredDelivery(0)),
+                dataCodingCaptor.capture(),
+                encodedShortMessageCaptor.capture(),
+                optionalParameterArgumentCaptor.capture()
+        );
+
+        assertEquals(deliverSmEvent.getSourceAddr(), sourceAddrCaptor.getValue());
+        assertEquals(UtilsEnum.getTypeOfNumber(deliverSmEvent.getSourceAddrTon()), sourceAddrTonCaptor.getValue());
+        assertEquals(deliverSmEvent.getDestinationAddr(), destAddrCaptor.getValue());
+        assertEquals(UtilsEnum.getTypeOfNumber(deliverSmEvent.getDestAddrTon()), destAddrTonCaptor.getValue());
+        assertEquals(UtilsEnum.getNumberingPlanIndicator(deliverSmEvent.getDestAddrNpi()), destAddrNpiCaptor.getValue());
+        assertEquals(UtilsEnum.getNumberingPlanIndicator(deliverSmEvent.getSourceAddrNpi()), sourceAddrNpiCaptor.getValue());
+        assertEquals(SmppEncoding.getDataCoding(deliverSmEvent.getDataCoding()), dataCodingCaptor.getValue());
+        assertArrayEquals(deliverSmEvent.getDelReceipt().getBytes(), encodedShortMessageCaptor.getValue());
+        assertEquals(30, optionalParameterArgumentCaptor.getValue().tag);
+        assertTrue(MessageType.SMSC_DEL_RECEIPT.containedIn(esmClassArgumentCaptor.getValue()));
     }
 
     @Test
-    void startScheduler() throws IllegalAccessException, NoSuchFieldException {
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Field executorServiceField = DeliverSmQueueConsumer.class.getDeclaredField("executorService");
-        executorServiceField.setAccessible(true);
-        executorServiceField.set(deliverSmQueueConsumer, executorService);
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
-        verify(executorService, times(appProperties.getDeliverSmWorkers())).execute(any(Runnable.class));
+    @DisplayName("Testing the DeliverSm send flow when there is no active server session")
+    void startSchedulerWhenNoActiveServerSessionThenNotSendDeliverSm() {
+        int destNetworkId = 1;
+        MessageEvent deliverSmEvent = MessageEvent.builder()
+                .id("1719421854353-11028072268459")
+                .deliverSmId("52b3afdb-565f-456c-8dff-97233d3afa88")
+                .deliverSmServerId("1719421854353-11028072268459")
+                .systemId("systemId123")
+                .sourceAddrTon(1)
+                .sourceAddrNpi(1)
+                .sourceAddr("50510201020")
+                .destAddrTon(1)
+                .destAddrNpi(1)
+                .destinationAddr("50582368999")
+                .esmClass(5)
+                .validityPeriod(60)
+                .registeredDelivery(0)
+                .dataCoding(0)
+                .shortMessage("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .originNetworkType("SP")
+                .originProtocol("SMPP")
+                .originNetworkId(2)
+                .destNetworkType("GW")
+                .destProtocol("SMPP")
+                .destNetworkId(destNetworkId)
+                .routingId(1)
+                .isDlr(true)
+                .delReceipt("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .build();
+
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(List.of(deliverSmEvent.toString()));
+        when(this.spSessionMock.getNextRoundRobinSession()).thenReturn(null);
+        when(this.spSessionMap.get(destNetworkId)).thenReturn(spSessionMock);
+
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
+
+        // Redis SMS in pending queue
+        verify(this.jedisCluster).lpush("1_smpp_pending_dlr", deliverSmEvent.toString());
+
+        // verify execution
+        verify(this.spSessionMap).get(1);
+        verify(this.generalSettingsCacheConfig, never()).getCurrentGeneralSettings();
+        verifyNoMoreInteractions(this.cdrProcessor);
+        verifyNoMoreInteractions(this.serverSession);
     }
 
     @Test
-    void queueProcessingBatchThread() {
-        String networkId = "1";
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\":\"systemId123\",\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1000);
-        Mockito.when(jedisCluster.lpush(networkId.concat("_smpp_pending_dlr"), "")).thenReturn(1L);
+    @DisplayName("Testing the DeliverSm send flow when there is no SpSession registered")
+    void startSchedulerWhenNoSpSessionRegisteredThenNotFindServerSession() {
+        int destNetworkId = 1;
+        MessageEvent deliverSmEvent = MessageEvent.builder()
+                .id("1719421854353-11028072268459")
+                .deliverSmId("52b3afdb-565f-456c-8dff-97233d3afa88")
+                .deliverSmServerId("1719421854353-11028072268459")
+                .systemId("systemId123")
+                .sourceAddrTon(1)
+                .sourceAddrNpi(1)
+                .sourceAddr("50510201020")
+                .destAddrTon(1)
+                .destAddrNpi(1)
+                .destinationAddr("50582368999")
+                .esmClass(5)
+                .validityPeriod(60)
+                .registeredDelivery(0)
+                .dataCoding(0)
+                .shortMessage("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .originNetworkType("SP")
+                .originProtocol("SMPP")
+                .originNetworkId(2)
+                .destNetworkType("GW")
+                .destProtocol("SMPP")
+                .destNetworkId(destNetworkId)
+                .routingId(1)
+                .isDlr(true)
+                .delReceipt("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .build();
 
-        Mockito.when(this.jedisCluster.hget(this.appProperties.getSmppGeneralSettingsHash(),
-                        this.appProperties.getSmppGeneralSettingsKey()))
-                .thenReturn("{\"id\":1,\"validity_period\":60,\"max_validity_period\":240,\"source_addr_ton\":1," +
-                        "\"source_addr_npi\":1,\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"encoding_iso88591\":3," +
-                        "\"encoding_gsm7\":0,\"encoding_ucs2\":2}");
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(List.of(deliverSmEvent.toString()));
+        when(this.spSessionMap.get(destNetworkId)).thenReturn(null);
 
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\":\"systemId123\",\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1);
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
 
-        generalSettingsCacheConfig = new GeneralSettingsCacheConfig(jedisCluster, appProperties);
-        generalSettingsCacheConfig.initializeGeneralSettings();
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
+        // Redis SMS in pending queue
+        verify(this.jedisCluster).lpush("1_smpp_pending_dlr", deliverSmEvent.toString());
+
+        // never executed
+        verifyNoMoreInteractions(this.spSessionMock);
+        verifyNoMoreInteractions(this.generalSettingsCacheConfig);
+        verifyNoMoreInteractions(this.cdrProcessor);
+        verifyNoMoreInteractions(this.serverSession);
     }
 
     @Test
-    void queueProcessingBatchThread_serverSessionNull() {
-        String networkId = "1";
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\":\"systemId123\",\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1000);
-        Mockito.when(jedisCluster.lpush(networkId.concat("_smpp_pending_dlr"), "")).thenReturn(1L);
+    @DisplayName("Testing the DeliverSm send flow when Redis queue is empty")
+    void startSchedulerWhenRedisQueueIsEmptyThenDoNothing() {
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(null);
 
-        SpSession spSession = new SpSession(this.jedisCluster, sp, this.appProperties);
-        spSessionMap.put("systemId123", spSession);
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, null, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
+
+        //Redis
+        verify(this.jedisCluster).lpop("smpp_dlr", 1);
+
+        // never executed
+        verifyNoMoreInteractions(this.spSessionMap);
+        verifyNoMoreInteractions(this.jedisCluster);
+        verifyNoMoreInteractions(this.spSessionMock);
+        verifyNoMoreInteractions(this.generalSettingsCacheConfig);
+        verifyNoMoreInteractions(this.cdrProcessor);
+        verifyNoMoreInteractions(this.serverSession);
     }
 
     @Test
-    void queueProcessingBatchThread_spSessionNull() {
-        String networkId = "1";
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\":\"test\",\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1000);
-        Mockito.when(jedisCluster.lpush(networkId.concat("_smpp_pending_dlr"), "")).thenReturn(1L);
+    @DisplayName("Testing the DeliverSm send flow when Redis has a deliverSmEvent with invalid json string")
+    void startSchedulerWhenProcessDeliverSmAndDeliverSmEventInvalidFormatThenNotTryToSend() {
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(List.of("incorrect:json}"));
 
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
+
+        //Redis
+        verify(this.jedisCluster).lpop("smpp_dlr", 1);
+
+        // never executed
+        verifyNoMoreInteractions(this.spSessionMap);
+        verifyNoMoreInteractions(this.jedisCluster);
+        verifyNoMoreInteractions(this.spSessionMock);
+        verifyNoMoreInteractions(this.generalSettingsCacheConfig);
+        verifyNoMoreInteractions(this.cdrProcessor);
+        verifyNoMoreInteractions(this.serverSession);
     }
 
     @Test
-    void queueProcessingBatchThread_throwException() {
-        String networkId = "1";
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\":\"systemId123\",\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1000);
-        Mockito.when(jedisCluster.lpush(networkId.concat("_smpp_pending_dlr"), "")).thenReturn(1L);
+    @DisplayName("Testing the DeliverSm send flow when getting exception to get active server session")
+    void startSchedulerWhenProcessDeliverSmAndGettingExceptionThenNotTryToSend() {
+        int destNetworkId = 1;
+        MessageEvent deliverSmEvent = MessageEvent.builder()
+                .id("1719421854353-11028072268459")
+                .deliverSmId("52b3afdb-565f-456c-8dff-97233d3afa88")
+                .deliverSmServerId("1719421854353-11028072268459")
+                .systemId("systemId123")
+                .sourceAddrTon(1)
+                .sourceAddrNpi(1)
+                .sourceAddr("50510201020")
+                .destAddrTon(1)
+                .destAddrNpi(1)
+                .destinationAddr("50582368999")
+                .esmClass(5)
+                .validityPeriod(60)
+                .registeredDelivery(0)
+                .dataCoding(0)
+                .shortMessage("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .originNetworkType("SP")
+                .originProtocol("SMPP")
+                .originNetworkId(2)
+                .destNetworkType("GW")
+                .destProtocol("SMPP")
+                .destNetworkId(destNetworkId)
+                .routingId(1)
+                .isDlr(true)
+                .delReceipt("id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message")
+                .build();
 
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, null, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
+        when(this.appProperties.getDeliverSmWorkers()).thenReturn(1);
+        when(this.appProperties.getDeliverSmBatchSizePerWorker()).thenReturn(1);
+        when(this.appProperties.getDeliverSmQueue()).thenReturn("smpp_dlr");
+        when(this.jedisCluster.lpop("smpp_dlr", 1)).thenReturn(List.of(deliverSmEvent.toString()));
+        when(this.spSessionMap.get(destNetworkId)).thenReturn(spSessionMock);
+        when(this.spSessionMock.getNextRoundRobinSession()).thenThrow(new RuntimeException("exception to get getNextRoundRobinSession"));
+
+        this.deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, generalSettingsCacheConfig );
+        this.deliverSmQueueConsumer.startScheduler();
+        toSleep();
+
+        // Redis SMS in pending queue
+        verifyNoMoreInteractions(this.jedisCluster);
+        verifyNoMoreInteractions(this.generalSettingsCacheConfig);
+        verifyNoMoreInteractions(this.cdrProcessor);
+        verifyNoMoreInteractions(this.serverSession);
     }
 
-    @Test
-    void queueProcessingBatchThread_systemIdNull() {
-        String networkId = "1";
-        Mockito.doReturn(List.of(
-                "{\"msisdn\":null,\"id\":\"1719421854353-11028072268459\",\"message_id\":\"1719421854353-11028072268459\",\"system_id\": null,\"deliver_sm_id\":null,\"deliver_sm_server_id\":null,\"command_status\":0,\"sequence_number\":0,\"source_addr_ton\":1,\"source_addr_npi\":1,\"source_addr\":\"50510201020\",\"dest_addr_ton\":1,\"dest_addr_npi\":1,\"destination_addr\":\"50582368999\",\"esm_class\":0,\"validity_period\":\"60\",\"registered_delivery\":1,\"data_coding\":0,\"sm_default_msg_id\":0,\"short_message\":\"id:1 sub:001 dlvrd:001 submit date:2101010000 done date:2101010000 stat:DELIVRD err:000 text:Test Message\",\"delivery_receipt\":null,\"status\":null,\"error_code\":null,\"check_submit_sm_response\":null,\"optional_parameters\":null,\"origin_network_type\":\"SP\",\"origin_protocol\":\"HTTP\",\"origin_network_id\":1,\"dest_network_type\":\"GW\",\"dest_protocol\":\"HTTP\",\"dest_network_id\":1,\"routing_id\":1,\"address_nature_msisdn\":null,\"numbering_plan_msisdn\":null,\"remote_dialog_id\":null,\"local_dialog_id\":null,\"sccp_called_party_address_pc\":null,\"sccp_called_party_address_ssn\":null,\"sccp_called_party_address\":null,\"sccp_calling_party_address_pc\":null,\"sccp_calling_party_address_ssn\":null,\"sccp_calling_party_address\":null,\"global_title\":null,\"global_title_indicator\":null,\"translation_type\":null,\"smsc_ssn\":null,\"hlr_ssn\":null,\"msc_ssn\":null,\"map_version\":null,\"is_retry\":false,\"retry_dest_network_id\":null,\"retry_number\":null,\"is_last_retry\":false,\"is_network_notify_error\":false,\"due_delay\":0,\"accumulated_time\":0,\"drop_map_sri\":false,\"network_id_to_map_sri\":-1,\"network_id_to_permanent_failure\":-1,\"drop_temp_failure\":false,\"network_id_temp_failure\":-1,\"imsi\":null,\"network_node_number\":null,\"network_node_number_nature_of_address\":null,\"network_node_number_numbering_plan\":null,\"mo_message\":false,\"is_sri_response\":false,\"check_sri_response\":false,\"msg_reference_number\":null,\"total_segment\":null,\"segment_sequence\":null,\"originator_sccp_address\":null,\"udhi\":null,\"udh_json\":null,\"parent_id\":null,\"is_dlr\":false,\"message_parts\":null}"
-        )).when(this.jedisCluster).lpop("smpp_dlr", 1000);
-        Mockito.when(jedisCluster.lpush(networkId.concat("_smpp_pending_dlr"), "")).thenReturn(1L);
-        sp.setSystemId(null);
-        SpSession spSession = new SpSession(this.jedisCluster, sp, this.appProperties);
-        spSessionMap.put("systemId123", spSession);
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
+    private static void toSleep() {
+        await().atMost(ONE_SECOND).until(() -> true);
     }
 
-    @Test
-    void startScheduler_queueProcessingBatchThread_throwsException() throws NoSuchFieldException, IllegalAccessException {
-        Field executorServiceField = DeliverSmQueueConsumer.class.getDeclaredField("executorService");
-        executorServiceField.setAccessible(true);
-        executorServiceField.set(deliverSmQueueConsumer, executorService);
-
-        deliverSmQueueConsumer = new DeliverSmQueueConsumer(jedisCluster, cdrProcessor, appProperties, spSessionMap, networkIdSystemIdMap, generalSettingsCacheConfig );
-        Assertions.assertDoesNotThrow(() -> deliverSmQueueConsumer.startScheduler());
-    }
 }

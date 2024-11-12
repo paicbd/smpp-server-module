@@ -1,6 +1,5 @@
 package com.paicbd.module.server;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.paicbd.module.components.GeneralSettingsCacheConfig;
 import com.paicbd.module.components.ServerHandler;
 import com.paicbd.module.utils.SpSession;
@@ -16,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsmpp.PDUStringException;
 import org.jsmpp.SMPPConstant;
-import org.jsmpp.bean.InterfaceVersion;
 import org.jsmpp.session.SMPPServerSessionListener;
 import org.jsmpp.session.SMPPServerSession;
 import org.jsmpp.session.BindRequest;
@@ -30,6 +28,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -44,7 +43,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.paicbd.module.utils.Constants.STOPPED;
 
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -57,8 +55,7 @@ public class SmppServer implements Runnable {
     private final ServerHandler serverHandler;
     private final AppProperties appProperties;
     private final Set<ServiceProvider> providers;
-    private final ConcurrentMap<String, SpSession> spSessionMap;
-    private final ConcurrentMap<Integer, String> networkIdSystemIdMap;
+    private final ConcurrentMap<Integer, SpSession> spSessionMap;
     private final GeneralSettingsCacheConfig generalSettingsCacheConfig;
     private final ThreadFactory factory = Thread.ofVirtual().name("server_session-", 0).factory();
     private final ExecutorService execService = Executors.newThreadPerTaskExecutor(factory);
@@ -137,7 +134,7 @@ public class SmppServer implements Runnable {
             SMPPServerSession serverSession,
             long timeout,
             Set<ServiceProvider> providers,
-            ConcurrentMap<String, SpSession> spSessionMap,
+            ConcurrentMap<Integer, SpSession> spSessionMap,
             JedisCluster jedisCluster,
             StompSession wsSession,
             ServerHandler serverHandler,
@@ -194,13 +191,13 @@ public class SmppServer implements Runnable {
                     return false;
                 }
 
-                if(!UtilsEnum.getBindType(currentProvider.getBindType()).equals(bindRequest.getBindType())) {
+                if (!UtilsEnum.getBindType(currentProvider.getBindType()).equals(bindRequest.getBindType())) {
                     bindRequest.reject(SMPPConstant.STAT_ESME_RBINDFAIL);
                 }
 
                 log.warn("Bind request received for {} provider", currentProvider.getSystemId());
                 SpSession currentSpSession = spSessionMap.computeIfAbsent(
-                        currentProvider.getSystemId(),
+                        currentProvider.getNetworkId(),
                         key -> new SpSession(jedisCluster, currentProvider, properties)
                 );
 
@@ -215,8 +212,15 @@ public class SmppServer implements Runnable {
                         )
                 );
                 var smppGeneralSettings = generalSettingsCacheConfig.getCurrentGeneralSettings();
-                serverSession.addSessionStateListener(new SessionStateListenerImpl(currentProvider.getSystemId(), spSessionMap, wsSession, jedisCluster, smppGeneralSettings, cdrProcessor));
-                bindRequest.accept(currentProvider.getSystemId(), InterfaceVersion.IF_50);
+                serverSession.addSessionStateListener(
+                        new SessionStateListenerImpl(
+                                currentProvider.getNetworkId(),
+                                spSessionMap,
+                                wsSession,
+                                jedisCluster,
+                                smppGeneralSettings,
+                                cdrProcessor));
+                bindRequest.accept(currentProvider.getSystemId(), bindRequest.getInterfaceVersion());
 
                 return true;
             } catch (PDUStringException | IOException e) {
@@ -238,18 +242,18 @@ public class SmppServer implements Runnable {
                 String data = String.valueOf(entry.getValue());
                 //Using this to skip backslash coming from regex in redis
                 data = data.replace("\\", "\\\\");
-                ServiceProvider sp = Converter.stringToObject(data, new TypeReference<>() {});
+                ServiceProvider sp = Converter.stringToObject(data, ServiceProvider.class);
+                Objects.requireNonNull(sp, "Service provider cannot be null");
                 var existingSp = this.providers.stream()
                         .filter(x -> x.getSystemId().equals(sp.getSystemId()))
                         .findFirst()
                         .orElse(null);
 
                 if (existingSp == null && "smpp".equalsIgnoreCase(sp.getProtocol())) {
-                    this.networkIdSystemIdMap.put(sp.getNetworkId(), sp.getSystemId());
                     providersToAdd.add(sp);
                 }
             } catch (Exception e) {
-                log.error("Error loading service provider: {}", e.getMessage());
+                log.error("Error loading service provider", e);
             }
         });
 

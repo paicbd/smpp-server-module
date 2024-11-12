@@ -13,15 +13,18 @@ import java.util.concurrent.ThreadFactory;
 
 import static com.paicbd.module.utils.Constants.STOPPED;
 
-@Getter
 @Slf4j(topic = "ServiceProviderSession")
 public class SpSession {
+    @Getter
     private final JedisCluster jedisCluster;
     private final AppProperties appProperties;
+    @Getter
     private final ServiceProvider currentServiceProvider;
+    @Getter
     private final List<Session> currentSmppSessions = new ArrayList<>();
     private final ThreadFactory factory = Thread.ofVirtual().name("Scheduled", 0).factory();
     private final ScheduledExecutorService deliveryExecService = Executors.newScheduledThreadPool(0, factory);
+
 
     private Boolean hasAvailableCredit;
     private int currentIndexRoundRobin = 0;
@@ -39,14 +42,9 @@ public class SpSession {
     }
 
     public void updateRedis() {
-        String data = this.currentServiceProvider.toString();
-        if (data.isEmpty()) {
-            return;
-        }
-
         // Using this to skip backslash coming from regex in redis
-        data = data.replace("\\\\", "\\");
-        this.jedisCluster.hset(this.appProperties.getServiceProvidersHashName(), this.currentServiceProvider.getSystemId(), data);
+        this.jedisCluster.hset(this.appProperties.getServiceProvidersHashName(),
+                String.valueOf(this.currentServiceProvider.getNetworkId()), this.currentServiceProvider.toString());
     }
 
     public Boolean hasAvailableCredit() {
