@@ -1,6 +1,6 @@
 # SMPP Server Module
 
-The `smpp-server-module` is a core component in the SMSC (Short Message Service Center) environment, designed to handle communication with external systems or service providers using the SMPP (Short Message Peer-to-Peer) protocol. This service efficiently processes message deliveries, retries, and delivery reports, integrating with Redis for queue management and offering WebSocket support for real-time interaction. Additionally, the module supports JMX monitoring, allowing administrators to track server performance and status.
+The `smpp-server-module` is a core component in the SMSC Short Message Service Center (SMSC) environment, designed to handle communication with external systems or service providers using the Short Message Peer-to-Peer protocol (SMPP). This service efficiently processes message deliveries, retries, and delivery reports, integrating with Redis for queue management and offering WebSocket support for real-time interaction. Additionally, the module supports JMX monitoring, allowing administrators to track server performance and status.
 
 ## Key Features
 
