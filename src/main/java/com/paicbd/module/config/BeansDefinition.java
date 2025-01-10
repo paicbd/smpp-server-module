@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import redis.clients.jedis.JedisCluster;
 
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -41,17 +40,18 @@ public class BeansDefinition {
 
     @Bean
     public JedisCluster jedisCluster() {
-        return Converter.paramsToJedisCluster(getJedisClusterParams(appProperties.getRedisNodes(), appProperties.getRedisMaxTotal(),
-                appProperties.getRedisMinIdle(), appProperties.getRedisMaxIdle(), appProperties.isRedisBlockWhenExhausted()));
+        return Converter.paramsToJedisCluster(
+                new UtilsRecords.JedisConfigParams(appProperties.getRedisNodes(), appProperties.getRedisMaxTotal(),
+                        appProperties.getRedisMaxIdle(), appProperties.getRedisMinIdle(),
+                        appProperties.isRedisBlockWhenExhausted(), appProperties.getRedisConnectionTimeout(),
+                        appProperties.getRedisSoTimeout(), appProperties.getRedisMaxAttempts(),
+                        appProperties.getRedisUser(), appProperties.getRedisPassword())
+        );
     }
 
     @Bean
     public SocketSession socketSession() {
         return new SocketSession("sp");
-    }
-
-    private UtilsRecords.JedisConfigParams getJedisClusterParams(List<String> nodes, int maxTotal, int minIdle, int maxIdle, boolean blockWhenExhausted) {
-        return new UtilsRecords.JedisConfigParams(nodes, maxTotal, minIdle, maxIdle, blockWhenExhausted);
     }
 
     @Bean

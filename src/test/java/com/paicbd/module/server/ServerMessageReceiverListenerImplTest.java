@@ -107,7 +107,6 @@ class ServerMessageReceiverListenerImplTest {
                 .status(Constants.BOUND)
                 .currentBindsCount(1)
                 .enquireLinkPeriod(5000)
-                .requestDlr(false)
                 .build();
 
         SubmitSm submitSmSpy = spy(submitSm);
@@ -179,7 +178,6 @@ class ServerMessageReceiverListenerImplTest {
                 .status(Constants.BOUND)
                 .currentBindsCount(1)
                 .enquireLinkPeriod(5000)
-                .requestDlr(true)
                 .build();
 
         SubmitSm submitSmSpy = spy(submitSm);
@@ -267,7 +265,6 @@ class ServerMessageReceiverListenerImplTest {
                 .status(Constants.BOUND)
                 .currentBindsCount(1)
                 .enquireLinkPeriod(5000)
-                .requestDlr(true)
                 .hasAvailableCredit(false)
                 .build();
         SpSession spSessionMock = new SpSession(jedisCluster, currentSp, properties);

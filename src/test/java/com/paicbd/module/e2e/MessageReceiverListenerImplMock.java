@@ -52,7 +52,7 @@ public class MessageReceiverListenerImplMock implements MessageReceiverListener 
         deliverSmEvent.setDelReceipt(deliverSm.getShortMessageAsDeliveryReceipt().toString());
 
         deliverSmEvent.setSystemId(this.serviceProvider.getSystemId());
-        deliverSmEvent.setRegisteredDelivery(this.serviceProvider.getRequestDlr() ? 1 : 0);
+
 
         return deliverSmEvent;
     }

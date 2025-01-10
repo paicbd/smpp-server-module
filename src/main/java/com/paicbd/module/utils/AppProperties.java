@@ -27,6 +27,21 @@ public class AppProperties {
     @Value("${redis.threadPool.blockWhenExhausted}")
     private boolean redisBlockWhenExhausted;
 
+    @Value("${redis.connection.timeout:0}")
+    private int redisConnectionTimeout;
+
+    @Value("${redis.so.timeout:0}")
+    private int redisSoTimeout;
+
+    @Value("${redis.maxAttempts:0}")
+    private int redisMaxAttempts;
+
+    @Value("${redis.connection.password:}")
+    private String redisPassword;
+
+    @Value("${redis.connection.user:}")
+    private String redisUser;
+
     // Websocket
     @Value("${websocket.server.host}")
     private String wsHost;
@@ -62,7 +77,7 @@ public class AppProperties {
     @Value("${websocket.header.value}")
     private String websocketHeaderValue;
 
-    @Value("${websocket.server.retryInterval}")
+    @Value("${websocket.retry.intervalSeconds}")
     private int websocketRetryInterval; // seconds
 
     @Value("${spring.application.name}")
