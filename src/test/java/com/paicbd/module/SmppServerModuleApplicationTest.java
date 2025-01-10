@@ -211,7 +211,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(okServiceProviderClone);
@@ -243,7 +242,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(invalidServiceprovider);
@@ -285,7 +283,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         SMPPSession newMockSmppSession = smppClient.createAndBindSmppSession(invalidBindTypeServiceProviderClone);
@@ -498,7 +495,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         serviceProviderWithoutCredit = ServiceProvider.builder()
@@ -520,7 +516,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(false)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         stoppedServiceProvider = ServiceProvider.builder()
@@ -542,7 +537,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
 
         invalidBindTypeServiceProvider = ServiceProvider.builder()
@@ -564,7 +558,6 @@ class SmppServerModuleApplicationTest {
                 .currentBindsCount(0)
                 .hasAvailableCredit(true)
                 .maxBinds(1)
-                .requestDlr(true)
                 .build();
     }
 

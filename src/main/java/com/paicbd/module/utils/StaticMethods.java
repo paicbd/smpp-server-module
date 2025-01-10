@@ -62,9 +62,11 @@ public class StaticMethods {
                     encodedShortMessage,
                     optionalParameters.isEmpty() ? null : SmppUtils.getTLV(deliverSmEvent));
 
-            cdrDetailToDeliver(deliverSmEvent, UtilsEnum.CdrStatus.SENT, cdrProcessor);
+            cdrDetailToDeliver(deliverSmEvent, cdrProcessor);
         } catch (Exception e) {
-            cdrDetailToDeliver(deliverSmEvent, UtilsEnum.CdrStatus.FAILED, cdrProcessor);
+            cdrProcessor.putCdrDetailOnRedis(
+                    deliverSmEvent.toCdrDetail(UtilsEnum.Module.SMPP_SERVER, UtilsEnum.MessageType.DELIVER, UtilsEnum.CdrStatus.FAILED, e.getMessage()));
+            cdrProcessor.createCdr(deliverSmEvent.getMessageId());
             log.error("Error on process deliverSm {} ex -> {}", deliverSmEvent, e.getMessage());
         }
     }
@@ -89,9 +91,11 @@ public class StaticMethods {
         }
     }
 
-    private static void cdrDetailToDeliver(MessageEvent deliverSmEvent, UtilsEnum.CdrStatus cdrStatus, CdrProcessor cdrProcessor) {
+    private static void cdrDetailToDeliver(
+            MessageEvent deliverSmEvent,
+            CdrProcessor cdrProcessor) {
         cdrProcessor.putCdrDetailOnRedis(
-                deliverSmEvent.toCdrDetail(UtilsEnum.Module.SMPP_SERVER, UtilsEnum.MessageType.DELIVER, cdrStatus, "Sent to SP"));
+                deliverSmEvent.toCdrDetail(UtilsEnum.Module.SMPP_SERVER, UtilsEnum.MessageType.DELIVER, UtilsEnum.CdrStatus.SENT, "Sent to SP"));
         cdrProcessor.createCdr(deliverSmEvent.getMessageId());
     }
 

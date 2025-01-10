@@ -139,7 +139,7 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
         submitSmEvent.setDestinationAddr(submitSm.getDestAddress());
         submitSmEvent.setEsmClass((int) submitSm.getEsmClass());
         submitSmEvent.setStringValidityPeriod(submitSm.getValidityPeriod());
-        submitSmEvent.setRegisteredDelivery(Boolean.TRUE.equals(spSession.getCurrentServiceProvider().getRequestDlr()) ? RequestDelivery.REQUEST_DLR.getValue() : RequestDelivery.NON_REQUEST_DLR.getValue());
+        submitSmEvent.setRegisteredDelivery((int) submitSm.getRegisteredDelivery());
         submitSmEvent.setDataCoding((int) submitSm.getDataCoding());
         submitSmEvent.setSmDefaultMsgId(submitSm.getSmDefaultMsgId());
         submitSmEvent.setShortMessage(decodedMessage);

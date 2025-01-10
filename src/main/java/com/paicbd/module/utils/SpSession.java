@@ -72,7 +72,6 @@ public class SpSession {
         this.currentServiceProvider.setAddressTon(newSp.getAddressTon());
         this.currentServiceProvider.setEnquireLinkPeriod(newSp.getEnquireLinkPeriod());
         this.currentServiceProvider.setPduTimeout(newSp.getPduTimeout());
-        this.currentServiceProvider.setRequestDlr(newSp.getRequestDlr());
         this.currentServiceProvider.setHasAvailableCredit(newSp.getHasAvailableCredit());
         this.currentServiceProvider.setBindType(newSp.getBindType());
         this.hasAvailableCredit = newSp.getHasAvailableCredit();
