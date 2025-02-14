@@ -452,10 +452,12 @@ class SmppServerModuleApplicationTest {
         UtilsRecords.OptionalParameter referenceNumber = new UtilsRecords.OptionalParameter((short) 524, "1");
         UtilsRecords.OptionalParameter totalSegment = new UtilsRecords.OptionalParameter((short) 526, "2");
         UtilsRecords.OptionalParameter sequence = new UtilsRecords.OptionalParameter((short) 527, sequencePart);
+        UtilsRecords.OptionalParameter language_indicator = new UtilsRecords.OptionalParameter((short) 525, "1");
 
         optionalParameters.add(referenceNumber);
         optionalParameters.add(totalSegment);
         optionalParameters.add(sequence);
+        optionalParameters.add(language_indicator);
 
         return optionalParameters;
     }
