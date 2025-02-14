@@ -9,10 +9,10 @@ import com.paicbd.smsc.cdr.CdrProcessor;
 import com.paicbd.smsc.dto.GeneralSettings;
 import com.paicbd.smsc.dto.MessageEvent;
 import com.paicbd.smsc.dto.ServiceProvider;
+import com.paicbd.smsc.dto.UtilsRecords;
 import com.paicbd.smsc.utils.Converter;
 import com.paicbd.smsc.utils.Generated;
 import com.paicbd.smsc.utils.MessageIDGeneratorImpl;
-import com.paicbd.smsc.utils.RequestDelivery;
 import com.paicbd.smsc.utils.SmppEncoding;
 import com.paicbd.smsc.utils.SmppUtils;
 import com.paicbd.smsc.utils.UtilsEnum;
@@ -44,8 +44,13 @@ import org.jsmpp.session.SubmitSmResult;
 import org.jsmpp.util.MessageIDGenerator;
 import org.jsmpp.util.MessageId;
 
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -57,6 +62,12 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
     private final AppProperties properties;
     private final CdrProcessor cdrProcessor;
     private final MultiPartsHandler multiPartsHandler;
+
+    private final Map<Short, Integer> tagMultiPartMessageToIndexMap = Map.of(
+            (short) 524, 0,
+            (short) 526, 1,
+            (short) 527, 2
+    );
 
     private Map<String, Object> udhMap;
 
@@ -83,13 +94,15 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
     private void addInQ(SubmitSm submitSm, MessageId messageId) {
         var isGSMSpecificFeatureDefault = GSMSpecificFeature.DEFAULT.containedIn(submitSm.getEsmClass());
         ServiceProvider currentServiceProvider = spSession.getCurrentServiceProvider();
-        MessageEvent submitSmEvent = createSubmitSmEvent(submitSm, messageId, currentServiceProvider);
+        GeneralSettings smppGeneralSettings = generalSettingsCacheConfig.getCurrentGeneralSettings();
+        int encodingType = SmppUtils.determineEncodingType(submitSm.getDataCoding(), smppGeneralSettings);
+        MessageEvent submitSmEvent = createSubmitSmEvent(submitSm, messageId, currentServiceProvider, encodingType);
         submitSmEvent.setOriginNetworkType("SP");
         submitSmEvent.setOriginProtocol("SMPP");
         submitSmEvent.setUdhi((isGSMSpecificFeatureDefault) ? "0" : "1");
 
         log.debug("Adding SubmitSm {} to {} queue.", submitSmEvent, properties.getPreMessageList());
-        if (isConcatenatedMessage(submitSm)) {
+        if (isConcatenatedMessage(submitSm, encodingType, submitSmEvent)) {
             multiPartsHandler.processPart(submitSmEvent, udhMap);
             return;
         }
@@ -98,17 +111,35 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
                 submitSmEvent.toCdrDetail(UtilsEnum.Module.SMPP_SERVER, UtilsEnum.MessageType.MESSAGE, UtilsEnum.CdrStatus.RECEIVED, "Received"));
     }
 
-    private boolean isConcatenatedMessage(SubmitSm submitSm) {
+    private boolean isConcatenatedMessage(SubmitSm submitSm, int encodingType, MessageEvent messageEvent) {
         boolean isConcatenated = false;
+
         if (submitSm.isUdhi()) {
-            udhMap = Converter.bytesToUdhMap(submitSm.getShortMessage());
+            udhMap = Converter.bytesToUdhMap(submitSm.getShortMessage(), encodingType);
             return udhMap.containsKey(Constants.IEI_CONCATENATED_MESSAGE);
+        } else if (isTlvMessagePart(messageEvent)) {
+            udhMap = new HashMap<>();
+            int[] segment = new int[3];
+
+            messageEvent.getOptionalParameters().stream()
+                    .filter(opt -> tagMultiPartMessageToIndexMap.containsKey(opt.tag()))
+                    .forEach(opt -> {
+                        Integer index = tagMultiPartMessageToIndexMap.get(opt.tag());
+                        segment[index] = Integer.parseInt(opt.value());
+                    });
+
+            udhMap.put(Constants.IEI_CONCATENATED_MESSAGE, segment);
+            udhMap.put("message", messageEvent.getShortMessage());
+
+            return true;
         }
+
         return isConcatenated;
     }
 
-    private MessageEvent createSubmitSmEvent(SubmitSm submitSm, MessageId messageId, ServiceProvider currentServiceProvider) {
-        MessageEvent event = getSubmitSmEvent(submitSm);
+    private MessageEvent createSubmitSmEvent(SubmitSm submitSm, MessageId messageId,
+                                             ServiceProvider currentServiceProvider, int encodingType) {
+        MessageEvent event = getSubmitSmEvent(submitSm, encodingType);
         event.setSystemId(currentServiceProvider.getSystemId());
         event.setOriginNetworkId(currentServiceProvider.getNetworkId());
         event.setId(messageId.getValue());
@@ -122,9 +153,7 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
         return event;
     }
 
-    private MessageEvent getSubmitSmEvent(SubmitSm submitSm) {
-        GeneralSettings smppGeneralSettings = generalSettingsCacheConfig.getCurrentGeneralSettings();
-        int encodingType = SmppUtils.determineEncodingType(submitSm.getDataCoding(), smppGeneralSettings);
+    private MessageEvent getSubmitSmEvent(SubmitSm submitSm, int encodingType) {
         String decodedMessage = SmppEncoding.decodeMessage(submitSm.getShortMessage(), encodingType);
         MessageEvent submitSmEvent = new MessageEvent();
         submitSmEvent.setRetry(false);
@@ -144,6 +173,17 @@ public class ServerMessageReceiverListenerImpl implements ServerMessageReceiverL
         submitSmEvent.setSmDefaultMsgId(submitSm.getSmDefaultMsgId());
         submitSmEvent.setShortMessage(decodedMessage);
         return submitSmEvent;
+    }
+
+    private boolean isTlvMessagePart(MessageEvent messageEvent) {
+        if (Objects.isNull(messageEvent.getOptionalParameters())) {
+            return false;
+        }
+
+        Set<Short> eventTags = messageEvent.getOptionalParameters().stream()
+                .map(UtilsRecords.OptionalParameter::tag)
+                .collect(Collectors.toSet());
+        return eventTags.containsAll(tagMultiPartMessageToIndexMap.keySet());
     }
 
     @Generated
